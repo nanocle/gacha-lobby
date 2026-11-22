@@ -1,0 +1,18 @@
+{
+  "vrm": "luna.vrm",
+  "look": "cel",
+  "cel": "cel/",
+  "fx": {
+    "module": "fx.mjs",
+    "data": "luna-fx.json"
+  },
+  "ui": {
+    "name": "白雪 ルナ",
+    "nameEn": "SHIRAYUKI LUNA",
+    "tag": "LUNA",
+    "short": "ルナ",
+    "sign": "ルナ電機"
+  },
+  "mtoon": {},
+  "license": "白雪 ルナのモデル: 改変OK・再配布NG・商用利用NG・クレジット表記が必要（白雪 ルナ / Nano）。このキットに入った形で使う場合を除き、モデルだけを取り出して配布しないでください。"
+}

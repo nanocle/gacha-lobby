@@ -1,0 +1,21 @@
+{
+  "skyline": {"file": "skyline.jpg", "width": 3600, "z": -1500, "horizon": -40, "horizonAt": 0.36, "gain": 0.8, "haze": 0.55},
+  "city": {
+    "c_shop":   {"file": "c_shop.glb",   "rotY": 0, "fit": 0.95, "glow": 1.0},
+    "c_office": {"file": "c_office.glb", "rotY": 0, "fit": 0.95, "glow": 1.0},
+    "c_slim":   {"file": "c_slim.glb",   "rotY": 0, "fit": 0.95, "glow": 1.0},
+    "c_step":   {"file": "c_step.glb",   "rotY": 0, "fit": 0.95, "glow": 1.0},
+    "c_screen": {"file": "c_screen.glb", "rotY": 0, "fit": 0.95, "glow": 1.0, "screen": {"cx": 0.5, "cy": 0.72, "w": 0.62, "h": 0.33, "z": 0.01}},
+    "L_tower":  {"file": "L_tower.glb",  "rotY": 0, "glow": 1.2, "landmark": true},
+    "L_spire":  {"file": "L_spire.glb",  "rotY": 0, "glow": 1.2, "landmark": true}
+  },
+  "landmarks": [
+    {"model": "L_spire", "x": -70,  "z": -480, "height": 230, "rotY": 0},
+    {"model": "L_tower", "x": 200,  "z": -560, "height": 280, "rotY": 0}
+  ],
+  "cars": [
+    {"file": "car_sedan.glb", "rotY": 0, "length": 5.4, "glow": 1.3, "flip": false},
+    {"file": "car_van.glb", "rotY": 0, "length": 6.8, "glow": 1.3, "flip": false}
+  ],
+  "floor": {"file": "floor.glb", "rotY": 0, "size": 5.6, "sink": 0.82, "glow": 0.25}
+}

@@ -1,0 +1,110 @@
+<!doctype html><html lang="ja"><head><meta charset="UTF-8"><title>ROOFTOP LOBBY</title>
+<!-- キャラクター（既定は白雪ルナ）を、サイバーパンクな屋上に立たせたソシャゲ風のロビー画面。
+     キャラは lobby.local.json（無ければ lobby.json）の character（characters/<名前>/character.json）で決まる。?chara=<名前> で一時的に切り替え、?look=mtoon|cel で描き方を切り替え
+     ?pose=lookback|lean|chest|behind  最初のポーズ      ?ui=0  UI を隠す      ?free=1  カメラを手で動かす（調整用）
+     ?refl=0  床の映り込みを切る（軽くする）              キー: P ポーズ切替 / H UI 表示切替 / C シーン切替 -->
+<script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
+<link rel="stylesheet" href="./lobby/lobby.css">
+</head><body>
+<div id="frame">
+  <canvas id="view"></canvas>
+  <div id="ui"></div>
+  <div id="loading"><div class="ld-title">ROOFTOP LOBBY</div><div class="ld-bar"><i></i></div><div id="status">NOW LOADING…</div></div>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from './vendor/OrbitControls.js';
+import {LobbyAvatar} from './lobby/avatar.mjs';
+import {setupCelLook} from './lobby/cel-look.mjs';
+import {setupLife} from './lobby/life.mjs';
+import {LobbyPost} from './lobby/post.mjs';
+import {createStage} from './lobby/stage.mjs';
+import {setupPoses, POSES} from './lobby/poses.mjs';
+import {createDirector, SHOTS, CAM} from './lobby/camera.mjs';
+import {buildUi} from './lobby/ui.mjs';
+import {setupWind, WIND} from './lobby/wind.mjs';
+import {setupMToonLook} from './lobby/mtoon-look.mjs';
+
+const q = new URLSearchParams(location.search), $ = id => document.getElementById(id);
+// どのキャラを出すか: lobby.local.json（自分用。git に入らない）があればそちら、無ければ lobby.json
+const readJson = url => fetch(url).then(r => r.ok ? r.json() : null).catch(() => null);
+const lobbyCfg = (await readJson('lobby.local.json')) ?? (await readJson('lobby.json')) ?? {};
+const charaId = q.get('chara') || lobbyCfg.character || 'luna', charaDir = `characters/${charaId}/`;
+const C = await fetch(charaDir + 'character.json').then(r => r.json()).catch(() => ({}));   // 無くても VRM が avatar.vrm なら動く
+const look = q.get('look') || C.look || 'mtoon';
+const free = q.get('free') === '1';
+const frameEl = $('frame'), canvas = $('view');
+const renderer = new THREE.WebGLRenderer({canvas, antialias: false, powerPreference: 'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio, +(q.get('dpr') ?? 1.5))); renderer.toneMapping = THREE.NoToneMapping;
+const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(24, 16 / 9, .05, 3000);
+camera.position.set(.9, 1.2, 3.3); camera.lookAt(.5, 1.05, 0);
+const post = new LobbyPost(renderer), stage = createStage(scene, {reflection: q.get('refl') !== '0', chara: C.ui ?? {}});
+const controls = free ? new OrbitControls(camera, canvas) : null; if (controls) { controls.target.set(0, 1, 0); controls.update(); post.dof = false; }
+
+// 画面は 16:9 に固定（ウィンドウに合わせて上下か左右に余白）
+function resize() {
+  const w = Math.min(innerWidth, innerHeight * 16 / 9), h = w * 9 / 16;
+  frameEl.style.width = w + 'px'; frameEl.style.height = h + 'px';
+  renderer.setSize(w, h, false); post.setSize(); stage.setSize(renderer); director?.setFov();
+}
+const hv = new THREE.Vector3(), hr = new THREE.Vector3(); let headBone = null;
+let wind = null;
+let avatar = null, fx = null, cel = null, life = null, poses = null, director = null, ui = null;
+const order = Object.keys(POSES);
+function setPose(key, instant = false) {
+  if (!POSES[key]) return; poses.set(key, instant ? 0 : 1.0); director.setPose(key, instant); ui?.setPose(key);
+  if (instant) { avatar.vrm.update(0); avatar.springManager?.reset(); }
+}
+async function load() {
+  try {
+    const res = await fetch(charaDir + (C.vrm ?? 'avatar.vrm')); if (!res.ok) throw new Error(`${charaDir}${C.vrm ?? 'avatar.vrm'} が見つかりません`);
+    avatar = new LobbyAvatar({scene}); avatar.setActive(true); await avatar.loadVRM(new File([await res.arrayBuffer()], 'avatar.vrm'));
+    const vrm = avatar.vrm; vrm.scene.updateMatrixWorld(true);
+    $('status').textContent = 'テクスチャを読み込み中…';
+    // 描き方: cel（セルルックのデータがあるキャラだけ）か mtoon（VRM のまま、ロビーの光に合わせる）。fx はキャラ専用のエフェクト（任意）
+    if (C.fx?.module) fx = await (await import('./' + charaDir + C.fx.module)).setupFx(vrm, charaDir + C.fx.data);   // キャラ専用のエフェクト（任意。ルナだけ）
+    if (look === 'cel' && C.cel) {
+      cel = await setupCelLook(vrm, charaDir + C.cel, fx);
+      const st = cel.data.state; post.bloomThreshold = st.bloom.Threshold;
+      if (fx && st.fx) { const F = st.fx; fx.uniforms.glow.value = F.FX_GlowStrength; fx.uniforms.halo.value = F.FX_HaloStrength; fx.uniforms.boost.value = F.FX_BoostStrength; fx.uniforms.hair.value = F.FX_HairStrength; }
+    } else { cel = setupMToonLook(vrm, scene, C.mtoon); post.bloomThreshold = C.mtoon?.bloomThreshold ?? 1.0; }
+    life = setupLife(vrm);
+    $('status').textContent = 'ステージを読み込み中…'; window.__assets = await stage.loadAssets('stage/');
+    poses = setupPoses(vrm); wind = setupWind(vrm); window.__wind = wind; window.__WIND = WIND; headBone = vrm.humanoid.getRawBoneNode('head'); post.maxBlur = 20;
+    director = createDirector(camera, post, {head: headBone}); director.enabled = !free;
+    ui = buildUi($('ui'), {poses: order.map(k => [k, POSES[k].label]), onPose: k => setPose(k), onCut: () => director.cut(), onHide: () => document.body.classList.toggle('noui'), chara: C.ui ?? {}});
+    resize(); setPose(POSES[q.get('pose')] ? q.get('pose') : order[0], true);
+    if (q.get('ui') === '0') document.body.classList.add('noui');
+    document.body.classList.add('ready');
+    Object.assign(window, {__chara: {id: charaId, look, config: C}, __avatar: avatar, __fx: fx, __cel: cel, __life: life, __poses: poses, __POSES: POSES, __director: director, __SHOTS: SHOTS, __CAM: CAM, __stage: stage, __post: post, __camera: camera, __setPose: setPose, __ready: true});
+  } catch (e) { $('status').textContent = '読み込めませんでした: ' + e.message; console.error(e); window.__error = String(e.stack || e); }
+}
+addEventListener('resize', resize); resize();
+addEventListener('keydown', e => {
+  if (!poses) return; const k = e.key.toLowerCase();
+  if (k === 'p') setPose(order[(order.indexOf(poses.current) + 1) % order.length]);
+  if (k === 'h') document.body.classList.toggle('noui');
+  if (k === 'c') director.cut();
+});
+const clock = new THREE.Clock();
+function frame(fixed) {
+  const d = typeof fixed === 'number' ? fixed : Math.min(clock.getDelta(), .05);
+  if (window.__ready) {   // 読み込みが全部終わってから動かす
+    poses.update(d); director.update(d); controls?.update();
+    camera.updateMatrixWorld(true); life.update(d, camera); wind.update(d); avatar.tick(d); fx?.update(d);
+    scene.updateMatrixWorld(true); cel.renderShadows(renderer, scene);
+  }
+  post.time += d; stage.update(d, camera, renderer);
+  stage.renderReflection(renderer, scene, camera);
+  post.render(scene, camera);
+  if (ui) {   // UI へ渡す: 名前を出す位置（キャラにかぶらない頭の横。0〜1）と、いまのカメラの数値
+    let hd = null;
+    if (window.__ready) { headBone.getWorldPosition(hv); hv.y += .10; hv.addScaledVector(hr.setFromMatrixColumn(camera.matrixWorld, 0), director.kind === 'face' ? .20 : .36); hv.project(camera); hd = {x: hv.x * .5 + .5, y: .5 - hv.y * .5, on: hv.z < 1}; }
+    ui.tick(d, {head: hd, kind: director?.kind, index: director?.index, focal: director?.focal, focus: director?.focus});
+  }
+}
+// ?rec=1: 動画の書き出し用。自動では進めず、録画側が __frame(1/30) で1コマずつ進める
+if (q.get('rec') !== '1') renderer.setAnimationLoop(() => frame());
+window.__frame = frame;   // __frame(dt): 1コマ進める（録画用）
+load();
+</script></body></html>

@@ -1,0 +1,8 @@
+# 自分のキャラは app/characters/<名前>/ に置く（ルナ以外はリポジトリに入れない）
+app/characters/*
+!app/characters/luna/
+out/
+node_modules/
+*.log
+app/lobby.local.json
+.server.json
